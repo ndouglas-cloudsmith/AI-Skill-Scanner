@@ -4,7 +4,7 @@ Simple tool for scanning Indicators of Compromise (IoCs) in publicly-source AI S
 
 ## Using Skill Scanner
 
-To avoid issues with anonymous API request limits in Github, you'll need to confirm your API key as an environmental variable to run this script:
+To avoid issues with anonymous API request limits in GH, you need to confirm your API key as an environment variable to run
 ```
 wget https://raw.githubusercontent.com/ndouglas-cloudsmith/AI-Skill-Scanner/refs/heads/main/skillscanner.py
 echo $GITHUB_TOKEN
