@@ -2,6 +2,7 @@ import os
 import argparse
 import requests
 import base64
+import sys
 
 # ANSI Escape Codes for formatting
 RED_BOLD = "\033[1;31m"
@@ -13,9 +14,10 @@ def get_matching_line(file_url, search_term, headers):
         api_url = file_url.replace("https://github.com", "https://api.github.com/repos")
         api_url = api_url.replace("/blob/", "/contents/")
         
-        res = requests.get(api_url, headers=headers)
+        res = requests.get(api_url, headers=headers, timeout=10)
         if res.status_code == 200:
             content_data = res.json()
+            # GitHub API returns content as base64
             decoded_bytes = base64.b64decode(content_data['content'])
             decoded_str = decoded_bytes.decode('utf-8', errors='ignore')
             
@@ -33,8 +35,6 @@ def scan_skills(repo_source, search_term):
         print(f"{RED_BOLD}Error: GITHUB_TOKEN environment variable is not set.{RESET}")
         return
 
-    # UPDATED QUERY: Removed 'path:skills/' and added 'extension:md'
-    # This searches for the term in any .md file anywhere in the repo.
     query = f"{search_term} repo:{repo_source} extension:md"
     search_url = f"https://api.github.com/search/code?q={query}"
     
@@ -45,27 +45,30 @@ def scan_skills(repo_source, search_term):
 
     print(f"Scanning {repo_source} for '{search_term}' in Markdown files...")
     
-    response = requests.get(search_url, headers=headers)
-    
-    if response.status_code != 200:
-        # Better error messaging for the user
-        msg = response.json().get('message', 'Unknown Error')
-        print(f"{RED_BOLD}Error {response.status_code}: {msg}{RESET}")
-        return
-
-    data = response.json()
-    items = data.get('items', [])
-    
-    print(f"\n- Found {len(items)} matching files")
-    print("-" * 40)
-
-    for item in items:
-        file_url = item['html_url']
-        print(f"File Link: {file_url}")
+    try:
+        response = requests.get(search_url, headers=headers, timeout=15)
         
-        snippet = get_matching_line(file_url, search_term, headers)
-        print(f"Detected Text: {snippet}")
+        if response.status_code != 200:
+            msg = response.json().get('message', 'Unknown Error')
+            print(f"{RED_BOLD}Error {response.status_code}: {msg}{RESET}")
+            return
+
+        data = response.json()
+        items = data.get('items', [])
+        
+        print(f"\n- Found {len(items)} matching files")
         print("-" * 40)
+
+        for item in items:
+            file_url = item['html_url']
+            print(f"File Link: {file_url}")
+            
+            snippet = get_matching_line(file_url, search_term, headers)
+            print(f"Detected Text: {snippet}")
+            print("-" * 40)
+            
+    except requests.exceptions.RequestException as e:
+        print(f"{RED_BOLD}Network error occurred: {e}{RESET}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Flexible GitHub Markdown Scanner.")
@@ -73,4 +76,13 @@ if __name__ == "__main__":
     parser.add_argument("--search", required=True, help="Term to scan for")
     
     args = parser.parse_args()
-    scan_skills(args.source, args.search)
+
+    try:
+        scan_skills(args.source, args.search)
+    except KeyboardInterrupt:
+        # Catch Ctrl+C and exit cleanly without the stack trace
+        print(f"\n\n{RED_BOLD}Scan interrupted by user. Exiting...{RESET}")
+        try:
+            sys.exit(0)
+        except SystemExit:
+            os._exit(0)
